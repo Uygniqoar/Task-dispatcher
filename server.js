@@ -2,7 +2,9 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 
@@ -47,11 +49,20 @@ function registerApiRoutes(app) {
   }
 
   function runEncodedPowerShell(script, callback) {
-    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-    exec(
-      `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -InputFormat Text -OutputFormat Text -EncodedCommand ${encodedScript}`,
-      callback
-    );
+    const tmp = path.join(os.tmpdir(), `traego-${crypto.randomUUID()}.ps1`);
+    fs.writeFile(tmp, `\ufeff${script}`, "utf8")
+      .then(() => {
+        exec(
+          `powershell -NoProfile -ExecutionPolicy Bypass -STA -File "${tmp}"`,
+          (error, stdout, stderr) => {
+            fs.unlink(tmp).catch(() => {});
+            callback(error, stdout, stderr);
+          }
+        );
+      })
+      .catch((err) => {
+        callback(err, "", String(err));
+      });
   }
 
   app.get("/api/health", async (req, res) => {
@@ -65,11 +76,11 @@ function registerApiRoutes(app) {
 
   app.get("/api/config", (req, res) => {
     const bridgePath = path.join(__dirname, "task-bridge.js");
-    const tasksPath = path.join(__dirname, "tasks.json");
+    const tasksPath = TASKS_FILE;
 
     const config = {
       mcpServers: {
-        "TaskDispatcher": {
+        "traego": {
           command: "node",
           args: [bridgePath],
           env: {
@@ -162,10 +173,10 @@ function registerApiRoutes(app) {
 
     const projectName = path.basename(task.projectPath);
     const sendText = escapeSendKeysText(
-      `${task.prompt}\n\n请在完成后调用 @TaskDispatcher complete_task，taskId=${task.id}，并在 summary 里简述你做了什么。`
+      `${task.prompt}\n\n请在完成后调用 @traego complete_task，taskId=${task.id}，并在 summary 里简述你做了什么。`
     );
     const soloKeys = process.env.TRAE_SOLO_KEYS || "^i";
-    const resultPrefix = "TASKDISPATCHER_RESULT=";
+    const resultPrefix = "TRAEGO_RESULT=";
     const psScript = `
       $ProgressPreference = "SilentlyContinue";
       $ErrorActionPreference = "SilentlyContinue";
@@ -175,16 +186,35 @@ function registerApiRoutes(app) {
       Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class Win32 {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetFocus(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+  public static uint GetForegroundProcessId() {
+    IntPtr fg = GetForegroundWindow();
+    if (fg == IntPtr.Zero) return 0;
+    GetWindowThreadProcessId(fg, out uint pid);
+    return pid;
+  }
+
+  public static string GetTitle(IntPtr hWnd) {
+    if (hWnd == IntPtr.Zero) return "";
+    int len = GetWindowTextLength(hWnd);
+    if (len <= 0) return "";
+    var sb = new StringBuilder(len + 1);
+    GetWindowText(hWnd, sb, sb.Capacity);
+    return sb.ToString();
+  }
 
   public static bool ForceForeground(IntPtr hWnd) {
     if (hWnd == IntPtr.Zero) return false;
@@ -210,16 +240,26 @@ public static class Win32 {
       try { $candidates += Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle -like "*Trae*" } } catch {}
 
       $traeWindows = $candidates |
-        Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } |
+        Where-Object { $_.MainWindowHandle -ne 0 } |
         Group-Object Id |
-        ForEach-Object { $_.Group | Select-Object -First 1 };
+        ForEach-Object { $_.Group | Select-Object -First 1 } |
+        ForEach-Object {
+          $t = [Win32]::GetTitle([IntPtr]$_.MainWindowHandle);
+          $_ | Add-Member -NotePropertyName "WindowTitle" -NotePropertyValue $t -Force;
+          $_
+        };
 
       if (-not $traeWindows -or $traeWindows.Count -eq 0) {
         Write-Output "${resultPrefix}TRAE_WINDOW_NOT_FOUND";
         exit 1;
       }
 
-      $target = $traeWindows | Where-Object { $_.MainWindowTitle -like "*${projectName}*" } | Select-Object -First 1;
+      $target = $traeWindows | Where-Object { $_.WindowTitle -like "*${projectName}*" } | Select-Object -First 1;
+      if (-not $target) {
+        $fgPid = [Win32]::GetForegroundProcessId();
+        if ($fgPid -ne 0) { $target = $traeWindows | Where-Object { $_.Id -eq $fgPid } | Select-Object -First 1; }
+      }
+      if (-not $target) { $target = $traeWindows | Where-Object { $_.WindowTitle -like "*Trae*" } | Select-Object -First 1; }
       if (-not $target) { $target = $traeWindows | Select-Object -First 1; }
 
       function Try-Activate([object]$p) {
@@ -229,9 +269,12 @@ public static class Win32 {
         Start-Sleep -Milliseconds 80;
         [Win32]::ForceForeground([IntPtr]$p.MainWindowHandle) | Out-Null;
         Start-Sleep -Milliseconds 120;
+        if ([Win32]::GetForegroundProcessId() -eq [uint32]$p.Id) { return $true }
         $ok = $wshell.AppActivate($p.Id);
-        if (-not $ok -and $p.MainWindowTitle) { $ok = $wshell.AppActivate($p.MainWindowTitle); }
-        return $ok;
+        if (-not $ok -and $p.WindowTitle) { $ok = $wshell.AppActivate($p.WindowTitle); }
+        Start-Sleep -Milliseconds 120;
+        if ([Win32]::GetForegroundProcessId() -eq [uint32]$p.Id) { return $true }
+        return [bool]$ok;
       }
 
       $ok = $false;
@@ -241,7 +284,8 @@ public static class Win32 {
       }
 
       if (-not $ok) {
-        Write-Output "DETAILS targetId=$($target.Id) handle=$($target.MainWindowHandle) title=$($target.MainWindowTitle)";
+        $summary = ($traeWindows | Select-Object -First 6 | ForEach-Object { "$($_.Id):$($_.MainWindowHandle):$($_.WindowTitle)" }) -join " | ";
+        Write-Output "DETAILS fgPid=$([Win32]::GetForegroundProcessId()) targetId=$($target.Id) handle=$($target.MainWindowHandle) title=$($target.WindowTitle) candidates=$summary";
         Write-Output "${resultPrefix}APP_ACTIVATE_FAILED";
         exit 2;
       }
@@ -306,21 +350,40 @@ public static class Win32 {
       $ProgressPreference = "SilentlyContinue";
       $ErrorActionPreference = "SilentlyContinue";
       $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);
-      if (-not $isAdmin) { Write-Output "TASKDISPATCHER_RESULT=NEED_ADMIN"; exit 3; }
+      if (-not $isAdmin) { Write-Output "TRAEGO_RESULT=NEED_ADMIN"; exit 3; }
 
       Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class Win32 {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetFocus(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+  public static uint GetForegroundProcessId() {
+    IntPtr fg = GetForegroundWindow();
+    if (fg == IntPtr.Zero) return 0;
+    GetWindowThreadProcessId(fg, out uint pid);
+    return pid;
+  }
+
+  public static string GetTitle(IntPtr hWnd) {
+    if (hWnd == IntPtr.Zero) return "";
+    int len = GetWindowTextLength(hWnd);
+    if (len <= 0) return "";
+    var sb = new StringBuilder(len + 1);
+    GetWindowText(hWnd, sb, sb.Capacity);
+    return sb.ToString();
+  }
 
   public static bool ForceForeground(IntPtr hWnd) {
     if (hWnd == IntPtr.Zero) return false;
@@ -346,13 +409,23 @@ public static class Win32 {
       try { $candidates += Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle -like "*Trae*" } } catch {}
 
       $traeWindows = $candidates |
-        Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } |
+        Where-Object { $_.MainWindowHandle -ne 0 } |
         Group-Object Id |
-        ForEach-Object { $_.Group | Select-Object -First 1 };
+        ForEach-Object { $_.Group | Select-Object -First 1 } |
+        ForEach-Object {
+          $t = [Win32]::GetTitle([IntPtr]$_.MainWindowHandle);
+          $_ | Add-Member -NotePropertyName "WindowTitle" -NotePropertyValue $t -Force;
+          $_
+        };
 
       if (-not $traeWindows -or $traeWindows.Count -eq 0) { exit 1; }
 
-      $target = $traeWindows | Where-Object { $_.MainWindowTitle -like "*${projectName}*" } | Select-Object -First 1;
+      $target = $traeWindows | Where-Object { $_.WindowTitle -like "*${projectName}*" } | Select-Object -First 1;
+      if (-not $target) {
+        $fgPid = [Win32]::GetForegroundProcessId();
+        if ($fgPid -ne 0) { $target = $traeWindows | Where-Object { $_.Id -eq $fgPid } | Select-Object -First 1; }
+      }
+      if (-not $target) { $target = $traeWindows | Where-Object { $_.WindowTitle -like "*Trae*" } | Select-Object -First 1; }
       if (-not $target) { $target = $traeWindows | Select-Object -First 1; }
 
       function Try-Activate([object]$p) {
@@ -362,9 +435,12 @@ public static class Win32 {
         Start-Sleep -Milliseconds 80;
         [Win32]::ForceForeground([IntPtr]$p.MainWindowHandle) | Out-Null;
         Start-Sleep -Milliseconds 120;
+        if ([Win32]::GetForegroundProcessId() -eq [uint32]$p.Id) { return $true }
         $ok = $wshell.AppActivate($p.Id);
-        if (-not $ok -and $p.MainWindowTitle) { $ok = $wshell.AppActivate($p.MainWindowTitle); }
-        return $ok;
+        if (-not $ok -and $p.WindowTitle) { $ok = $wshell.AppActivate($p.WindowTitle); }
+        Start-Sleep -Milliseconds 120;
+        if ([Win32]::GetForegroundProcessId() -eq [uint32]$p.Id) { return $true }
+        return [bool]$ok;
       }
 
       $ok = $false;
@@ -373,7 +449,12 @@ public static class Win32 {
         if (-not $ok) { Start-Sleep -Milliseconds 250; }
       }
 
-      if (-not $ok) { Write-Error "APP_ACTIVATE_FAILED"; exit 2; }
+      if (-not $ok) {
+        $summary = ($traeWindows | Select-Object -First 6 | ForEach-Object { "$($_.Id):$($_.MainWindowHandle):$($_.WindowTitle)" }) -join " | ";
+        Write-Output "DETAILS fgPid=$([Win32]::GetForegroundProcessId()) targetId=$($target.Id) handle=$($target.MainWindowHandle) title=$($target.WindowTitle) candidates=$summary";
+        Write-Error "APP_ACTIVATE_FAILED";
+        exit 2;
+      }
       exit 0;
     `;
 

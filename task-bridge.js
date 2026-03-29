@@ -13,7 +13,7 @@ const TASKS_FILE = process.env.TASKS_FILE_PATH || path.join(__dirname, "tasks.js
 
 const server = new Server(
   {
-    name: "TaskConnector",
+    name: "traego",
     version: "1.0.0",
   },
   {
@@ -170,4 +170,4 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("TaskConnector MCP server running on stdio");
+console.error("traego MCP server running on stdio");

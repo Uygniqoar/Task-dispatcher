@@ -31,3 +31,6 @@ Desktop.ini
 dist/
 build/
 coverage/
+
+# Local task bus (contains local absolute paths / heartbeat)
+tasks.json
