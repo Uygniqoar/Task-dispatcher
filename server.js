@@ -11,17 +11,12 @@ import { exec } from "child_process";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TASKS_FILE = process.env.TASKS_FILE_PATH || path.join(__dirname, "tasks.json");
 
-const appApi = express();
-const appUi = express();
-const API_PORT = process.env.API_PORT || 4100;
-const UI_PORT = process.env.UI_PORT || 3200;
+const app = express();
+const PORT = process.env.PORT || process.env.UI_PORT || 3202;
 
-appApi.use(cors());
-appApi.use(bodyParser.json());
-
-appUi.use(cors());
-appUi.use(bodyParser.json());
-appUi.use(express.static(path.join(__dirname, "public")));
+app.use(cors());
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, "public")));
 
 async function readTasks() {
   try {
@@ -175,6 +170,7 @@ function registerApiRoutes(app) {
     const sendText = escapeSendKeysText(
       `${task.prompt}\n\n请在完成后调用 @Traego complete_task，taskId=${task.id}，并在 summary 里简述你做了什么。`
     );
+    const encodedSendText = Buffer.from(sendText, "utf8").toString("base64");
     const soloKeys = process.env.TRAE_SOLO_KEYS || "^i";
     const resultPrefix = "TRAEGO_RESULT=";
     const psScript = `
@@ -182,6 +178,8 @@ function registerApiRoutes(app) {
       $ErrorActionPreference = "SilentlyContinue";
       $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);
       if (-not $isAdmin) { Write-Output "${resultPrefix}NEED_ADMIN"; exit 3; }
+
+      $sendText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${encodedSendText}"));
 
       Add-Type -TypeDefinition @"
 using System;
@@ -293,7 +291,7 @@ public static class Win32 {
       Start-Sleep -Milliseconds 500;
       $wshell.SendKeys("${soloKeys}");
       Start-Sleep -Milliseconds 800;
-      $wshell.SendKeys("${sendText}");
+      $wshell.SendKeys($sendText);
       Start-Sleep -Milliseconds 200;
       $wshell.SendKeys("{ENTER}");
       Write-Output "${resultPrefix}SENT";
@@ -467,6 +465,22 @@ public static class Win32 {
     });
   });
 
+  app.delete("/api/tasks", async (req, res) => {
+    const { status } = req.query;
+    if (!status) return res.status(400).json({ error: "status is required" });
+
+    const data = await readTasks();
+    const initialCount = data.tasks.length;
+    data.tasks = data.tasks.filter((t) => t.status !== status);
+
+    if (data.tasks.length < initialCount) {
+      await writeTasks(data);
+      res.json({ success: true, message: `Tasks with status ${status} deleted` });
+    } else {
+      res.json({ success: true, message: "No tasks found with that status" });
+    }
+  });
+
   app.delete("/api/tasks/:id", async (req, res) => {
     const { id } = req.params;
     const data = await readTasks();
@@ -495,13 +509,16 @@ public static class Win32 {
   });
 }
 
-registerApiRoutes(appApi);
-registerApiRoutes(appUi);
+registerApiRoutes(app);
 
-appApi.listen(API_PORT, "127.0.0.1", () => {
-  console.log(`API Server running at http://127.0.0.1:${API_PORT}`);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running at http://127.0.0.1:${PORT}`);
 });
 
-appUi.listen(UI_PORT, "127.0.0.1", () => {
-  console.log(`Management UI Server running at http://127.0.0.1:${UI_PORT}`);
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Please use a different port or kill the process using it.`);
+  } else {
+    console.error('Server error:', err);
+  }
 });

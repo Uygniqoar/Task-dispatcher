@@ -20,6 +20,13 @@
                     MCP 配置
                 </button>
             </div>
+            <div class="px-4 mb-6">
+                <button onclick="copyAutoPilotPrompt(this)" class="w-full text-[10px] bg-indigo-600/20 text-indigo-400 border border-indigo-400/30 px-2 py-2 rounded hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 group">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    复制 Auto-Pilot 提示词
+                </button>
+                <p class="text-[9px] text-gray-500 mt-1.5 px-1 leading-tight">将此提示词粘贴到 Trae 的 User Instructions 中即可开启自动接单。</p>
+            </div>
             <nav id="projectList" class="space-y-1">
                 <button onclick="filterProject(null)" 
                     class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gray-800 text-white">
@@ -91,7 +98,10 @@
 
             <div class="flex justify-between items-center mb-6">
                 <h2 id="listTitle" class="text-xl font-bold text-gray-800">所有任务</h2>
-                <div class="flex gap-2">
+                <div class="flex gap-2 items-center">
+                    <button id="clearCompletedBtn" onclick="clearTasks('completed')" class="text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-medium hover:bg-red-100 hover:text-red-600 transition-all hidden">
+                        清除已完成
+                    </button>
                     <span id="taskCount" class="text-sm bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-medium">0 任务</span>
                 </div>
             </div>
@@ -115,11 +125,12 @@
     </main>
 
     <script>
-        const API_BASE = '';
+        const API_BASE = window.location.origin;
         const taskForm = document.getElementById('taskForm');
         const taskList = document.getElementById('taskList');
         const projectList = document.getElementById('projectList');
         const taskCount = document.getElementById('taskCount');
+        const clearCompletedBtn = document.getElementById('clearCompletedBtn');
         const listTitle = document.getElementById('listTitle');
         const configModal = document.getElementById('configModal');
         const configContent = document.getElementById('configContent');
@@ -222,6 +233,19 @@
                 setTimeout(() => {
                     btn.innerHTML = originalText;
                     btn.classList.replace('bg-green-600', 'bg-blue-600');
+                }, 2000);
+            });
+        }
+
+        function copyAutoPilotPrompt(btn) {
+             const prompt = `你已连接到 Traego MCP 工具。每当你启动或空闲时，请优先调用 mcp_Traego_get_task（需传入当前项目的绝对路径作为 projectPath 参数）检查是否有待处理任务。如果有 pending 任务，请直接开始开发，无需询问我。开发完成后，务必调用 mcp_Traego_complete_task 汇报进度，并在 summary 参数中简述你所做的修改。`;
+             navigator.clipboard.writeText(prompt).then(() => {
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 已复制到剪贴板';
+                btn.className = btn.className.replace('text-indigo-400', 'text-green-400').replace('border-indigo-400/30', 'border-green-400/30');
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.className = btn.className.replace('text-green-400', 'text-indigo-400').replace('border-green-400/30', 'border-indigo-400/30');
                 }, 2000);
             });
         }
@@ -406,6 +430,14 @@
 
             taskCount.textContent = `${filteredTasks.length} 任务`;
 
+            // Show/hide clear completed button
+            const hasCompleted = filteredTasks.some(t => t.status === 'completed');
+            if (hasCompleted) {
+                clearCompletedBtn.classList.remove('hidden');
+            } else {
+                clearCompletedBtn.classList.add('hidden');
+            }
+
             if (filteredTasks.length === 0) {
                 taskList.innerHTML = `
                     <div class="bg-white rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
@@ -533,14 +565,14 @@
             try {
                 {
                     const controller = new AbortController();
-                    const timeout = setTimeout(() => controller.abort(), 1500);
+                    const timeout = setTimeout(() => controller.abort(), 3000);
                     const healthRes = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
                     clearTimeout(timeout);
-                    if (!healthRes.ok) throw new Error('health_not_ok');
+                    if (!healthRes.ok) throw new Error(`HTTP_${healthRes.status}`);
                 }
 
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 2500);
+                const timeout = setTimeout(() => controller.abort(), 5000);
                 const res = await fetch(`${API_BASE}/api/tasks`, { signal: controller.signal });
                 clearTimeout(timeout);
                 const data = await res.json();
@@ -637,6 +669,24 @@
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
+            }
+        }
+
+        async function clearTasks(status) {
+            if (!confirm(`确定要清除所有状态为 ${status} 的任务吗？`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks?status=${status}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    fetchTasks();
+                } else {
+                    alert('清除失败');
+                }
+            } catch (err) {
+                alert('连接 API 失败');
             }
         }
 

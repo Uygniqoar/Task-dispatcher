@@ -62,7 +62,7 @@ npm install
 npm run start-ui
 ```
 
-服务启动后，在浏览器访问 [http://localhost:3200](http://localhost:3200) 即可进入控制台。
+服务启动后，在浏览器访问 [http://localhost:3202](http://localhost:3202) 即可进入控制台。
 
 ### 4. 配置 Trae MCP
 
@@ -73,9 +73,9 @@ npm run start-ui
   "mcpServers": {
     "Traego": {
       "command": "node",
-      "args": ["c:/Users/rao/Desktop/IRDP/Task-dispatcher/task-bridge.js"],
+      "args": ["/path/to/your/Task-dispatcher/task-bridge.js"],
       "env": {
-        "TASKS_FILE_PATH": "c:/Users/rao/Desktop/IRDP/Task-dispatcher/tasks.json"
+        "TASKS_FILE_PATH": "/path/to/your/Task-dispatcher/tasks.json"
       }
     }
   }
@@ -141,6 +141,12 @@ Traego 为 Trae 提供了以下 MCP Tools（工具全名通常形如 `mcp_Traego
 
 ### Q3: 为什么发送到 Trae 的中文变成了乱码或缺失？
 Traego 在自动化注入指令时会自动处理大部分字符的转义（如大括号、特殊符号）。如果遇到系统级输入法干扰，请确保当前系统的默认输入状态为英文半角，或检查 `server.js` 中的 `escapeSendKeysText` 逻辑。
+
+### Q4: 任务派发失败，详情提示“POWERSHELL_FAILED”或包含特殊字符错误？
+这通常是因为任务描述 (Prompt) 中包含了 PowerShell 无法直接解析的特殊符号（如未转义的引号或 & 符号）。
+**解决方案**：
+1. Traego 已在 v1.2 版本中引入了 Base64 编码传输机制，极大提高了对复杂 Prompt 的兼容性。请确保你使用的是最新版本的 `server.js`。
+2. 检查系统中是否禁用了脚本执行。尝试以管理员身份运行 `Set-ExecutionPolicy RemoteSigned`。
 
 ---
 
