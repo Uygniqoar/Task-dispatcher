@@ -1,4 +1,4 @@
 $ErrorActionPreference = "Stop"
 
-$taskName = "traego"
+$taskName = "Traego"
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue

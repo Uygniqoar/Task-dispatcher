@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>traego - 管理面板</title>
+    <title>Traego - 管理面板</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen flex overflow-hidden">
+<body class="bg-gray-100 h-screen flex overflow-hidden">
     <!-- Sidebar -->
     <aside class="w-72 bg-gray-900 text-white flex flex-col flex-shrink-0">
         <div class="p-6 border-b border-gray-800">
-            <h1 class="text-xl font-bold text-blue-400">traego</h1>
+            <h1 class="text-xl font-bold text-blue-400">Traego</h1>
             <p class="text-xs text-gray-400 mt-1">管理面板 v1.2</p>
         </div>
         <div class="flex-1 overflow-y-auto p-4">
@@ -70,8 +70,9 @@
                     <div class="grid grid-cols-1 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">项目路径</label>
-                            <input type="text" id="projectPath" placeholder="例如: C:\Projects\MyProject" required
+                            <input type="text" id="projectPath" placeholder="例如: C:\Projects\MyProject" required list="projectSuggestions"
                                 class="block w-full border border-gray-300 rounded-md shadow-sm p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                            <datalist id="projectSuggestions"></datalist>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">任务描述 (Prompt)</label>
@@ -130,10 +131,57 @@
         let currentProjectFilter = null;
         let fetchTimer = null;
         let retryMs = 1000;
+        
+        // 保存折叠状态
+        const collapsedProjects = new Set(JSON.parse(localStorage.getItem('collapsedProjects') || '[]'));
+        const collapsedCompleted = new Set(JSON.parse(localStorage.getItem('collapsedCompleted') || '[]'));
+        
+        // 保存见过的项目路径
+        const knownProjectPaths = new Set(JSON.parse(localStorage.getItem('knownProjectPaths') || '[]'));
+
+        function saveCollapseState() {
+            localStorage.setItem('collapsedProjects', JSON.stringify([...collapsedProjects]));
+            localStorage.setItem('collapsedCompleted', JSON.stringify([...collapsedCompleted]));
+        }
+
+        function saveKnownProjects() {
+            localStorage.setItem('knownProjectPaths', JSON.stringify([...knownProjectPaths]));
+        }
+
+        function toggleProjectCollapse(path, e) {
+            if (e) e.stopPropagation();
+            if (collapsedProjects.has(path)) {
+                collapsedProjects.delete(path);
+            } else {
+                collapsedProjects.add(path);
+            }
+            saveCollapseState();
+            renderSidebar(allTasks);
+        }
+
+        function toggleCompletedCollapse(path, e) {
+            if (e) e.stopPropagation();
+            if (collapsedCompleted.has(path)) {
+                collapsedCompleted.delete(path);
+            } else {
+                collapsedCompleted.add(path);
+            }
+            saveCollapseState();
+            renderSidebar(allTasks);
+        }
+
+        function scrollToTask(id) {
+            const el = document.getElementById(`task-${id}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+                setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2'), 2000);
+            }
+        }
 
         function formatDispatchError(code) {
             const c = String(code || '');
-            if (c === 'NEED_ADMIN') return '需要管理员权限启动 traego（右键 PowerShell → 以管理员运行，再 npm run start-ui）';
+            if (c === 'NEED_ADMIN') return '需要管理员权限启动 Traego（右键 PowerShell → 以管理员运行，再 npm run start-ui）';
             if (c === 'APP_ACTIVATE_FAILED') return '无法激活 Trae 窗口：请先将 Trae 窗口还原并手动点到前台（含切到对应虚拟桌面）；若 Trae 以管理员运行，请确保派发器也以管理员启动';
             if (c === 'TRAE_WINDOW_NOT_FOUND') return '未找到 Trae 窗口（请确保 Trae 正在运行且窗口可见）';
             if (c === 'POWERSHELL_FAILED') return '系统自动化脚本执行失败（PowerShell 限制/杀软拦截）';
@@ -200,7 +248,7 @@
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> 
                             路径正确但 Trae 未心跳
                             <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 leading-tight">
-                                Trae 还没有调用到 MCP 工具。请在 Trae 里执行一次 @traego ping 或获取任务，然后再检查连接。
+                                Trae 还没有调用到 MCP 工具。请在 Trae 里执行一次 @Traego ping 或获取任务，然后再检查连接。
                             </span>
                         `;
                         // Create an automatic setup helper button if it's the first time
@@ -261,26 +309,94 @@
             renderTasks();
         }
 
+        function updateProjectSuggestions() {
+            const suggestions = document.getElementById('projectSuggestions');
+            const projects = [...knownProjectPaths].sort();
+            suggestions.innerHTML = projects.map(p => `<option value="${p}">`).join('');
+        }
+
         function renderSidebar(tasks) {
-            const projects = [...new Set(tasks.map(t => t.projectPath))].sort();
+            // 将当前任务中的项目也加入已知
+            tasks.forEach(t => {
+                if (!knownProjectPaths.has(t.projectPath)) {
+                    knownProjectPaths.add(t.projectPath);
+                    saveKnownProjects();
+                }
+            });
+
+            const projects = [...knownProjectPaths].sort();
             
             const allBtn = `
                 <button onclick="filterProject(null)" 
-                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentProjectFilter === null ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
+                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors mb-2 ${currentProjectFilter === null ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
                     全部项目
                 </button>
             `;
 
-            const projectBtns = projects.map(path => `
-                <button onclick="filterProject('${path.replace(/\\/g, '\\\\')}')" 
-                    data-path="${path}"
-                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentProjectFilter === path ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
-                    <div class="truncate">${getProjectName(path)}</div>
-                    <div class="text-[10px] text-gray-500 truncate">${path}</div>
-                </button>
-            `).join('');
+            const projectSections = projects.map(path => {
+                const projectTasks = tasks.filter(t => t.projectPath === path);
+                const activeTasks = projectTasks.filter(t => t.status !== 'completed');
+                const completedTasks = projectTasks.filter(t => t.status === 'completed');
+                
+                // 如果没有任务且不是当前过滤器，则不显示（除非是已知路径但没任务，也可以选择显示）
+                if (projectTasks.length === 0 && currentProjectFilter !== path) {
+                    // return ''; 
+                }
 
-            projectList.innerHTML = allBtn + projectBtns;
+                const isCollapsed = collapsedProjects.has(path);
+                const isCompletedCollapsed = collapsedCompleted.has(path);
+
+                return `
+                    <div class="mb-4 group">
+                        <div class="flex items-center justify-between px-3 py-2 rounded-md transition-colors ${currentProjectFilter === path ? 'bg-gray-800/50' : 'hover:bg-gray-800/30'}">
+                            <button onclick="filterProject('${path.replace(/\\/g, '\\\\')}')" 
+                                class="flex-1 text-left text-sm font-medium transition-colors ${currentProjectFilter === path ? 'text-white' : 'text-gray-400 hover:text-white'}">
+                                <div class="truncate font-bold">${getProjectName(path)}</div>
+                                <div class="text-[9px] opacity-50 truncate">${path}</div>
+                            </button>
+                            <button onclick="toggleProjectCollapse('${path.replace(/\\/g, '\\\\')}', event)" 
+                                class="ml-2 text-gray-500 hover:text-white transition-transform ${isCollapsed ? '-rotate-90' : ''}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                        </div>
+
+                        <div class="mt-1 ml-4 space-y-1 ${isCollapsed ? 'hidden' : ''}">
+                            ${activeTasks.length === 0 && completedTasks.length === 0 ? `
+                                <div class="px-2 py-1 text-[10px] text-gray-600 italic">无活跃任务</div>
+                            ` : ''}
+                            
+                            ${activeTasks.map(t => `
+                                <button onclick="scrollToTask('${t.id}')" 
+                                    class="w-full text-left px-2 py-1.5 rounded text-xs transition-colors hover:bg-gray-800/50 flex items-center gap-2 ${t.status === 'in_progress' ? 'text-blue-400 font-semibold' : 'text-gray-400'}">
+                                    <span class="w-1.5 h-1.5 rounded-full ${t.status === 'in_progress' ? 'bg-blue-500 animate-pulse' : 'bg-yellow-500'}"></span>
+                                    <span class="truncate">${t.prompt}</span>
+                                </button>
+                            `).join('')}
+
+                            ${completedTasks.length > 0 ? `
+                                <div class="mt-2">
+                                    <button onclick="toggleCompletedCollapse('${path.replace(/\\/g, '\\\\')}', event)" 
+                                        class="w-full flex items-center justify-between px-2 py-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-tight font-bold">
+                                        <span>已完成 (${completedTasks.length})</span>
+                                        <svg class="w-3 h-3 transition-transform ${isCompletedCollapsed ? '-rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </button>
+                                    <div class="space-y-0.5 mt-1 ${isCompletedCollapsed ? 'hidden' : ''}">
+                                        ${completedTasks.map(t => `
+                                            <button onclick="scrollToTask('${t.id}')" 
+                                                class="w-full text-left px-2 py-1 rounded text-[10px] text-gray-600 hover:bg-gray-800/40 hover:text-gray-400 transition-colors flex items-center gap-2">
+                                                <svg class="w-2.5 h-2.5 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                                                <span class="truncate">${t.prompt}</span>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            projectList.innerHTML = allBtn + projectSections;
         }
 
         function renderTasks() {
@@ -300,7 +416,7 @@
             }
 
             taskList.innerHTML = filteredTasks.slice().reverse().map(task => `
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 hover:border-blue-300 transition-colors">
+                <div id="task-${task.id}" class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 hover:border-blue-300 transition-all duration-300 scroll-mt-20">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
                             <span class="text-xs font-mono text-gray-400">#${task.id.slice(-6)}</span>
@@ -407,6 +523,12 @@
             `).join('');
         }
 
+        function updateProjectSuggestions(tasks) {
+            const suggestions = document.getElementById('projectSuggestions');
+            const projects = [...new Set(tasks.map(t => t.projectPath))].sort();
+            suggestions.innerHTML = projects.map(p => `<option value="${p}">`).join('');
+        }
+
         async function fetchTasks() {
             try {
                 {
@@ -427,10 +549,10 @@
                 allTasks = data.tasks;
                 const newProjects = [...new Set(allTasks.map(t => t.projectPath))];
                 
-                // 只有当项目列表变化时才重新渲染侧边栏，避免闪烁
-                if (JSON.stringify(oldProjects.sort()) !== JSON.stringify(newProjects.sort())) {
-                    renderSidebar(allTasks);
-                }
+                updateProjectSuggestions();
+
+                // 渲染侧边栏（包含已知项目）
+                renderSidebar(allTasks);
                 
                 renderTasks();
                 connectionBanner.classList.add('hidden');

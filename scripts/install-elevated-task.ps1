@@ -8,7 +8,7 @@ if (-not $isAdmin) {
   exit 1
 }
 
-$taskName = "traego"
+$taskName = "Traego"
 $repo = Split-Path $PSScriptRoot -Parent
 $scriptPath = Join-Path $repo "scripts\\run-dispatcher.ps1"
 

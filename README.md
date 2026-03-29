@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🚀 traego</h1>
+  <h1>🚀 Traego</h1>
   <p><b>为 Trae IDE 量身定制的跨项目自动化任务派发与调度总线</b></p>
 
   <p>
@@ -16,7 +16,7 @@
 
 ## 📖 简介
 
-**traego** 旨在解决多项目、多窗口场景下的 Trae 任务派发痛点。
+**Traego** 旨在解决多项目、多窗口场景下的 Trae 任务派发痛点。
 它基于“文件即总线”的极简架构，结合 Model Context Protocol (MCP)，允许你在统一的 Web 管理面板中跨项目下发任务，并通过系统级自动化（Windows PowerShell）自动唤起并驱动目标项目窗口内的 Trae AI 助手（Solo 模式）自动执行开发任务。
 
 ## ✨ 特性
@@ -29,7 +29,7 @@
 
 ## 🏗️ 核心架构
 
-traego 的运行依赖三个核心组件：
+Traego 的运行依赖三个核心组件：
 
 1. **总线 (Event Bus - `tasks.json`)**：唯一的本地数据源，所有任务状态、心跳及执行日志都在此流转。
 2. **控制端 (Management UI - `server.js` + `index.html`)**：运行在 Node.js 上的 Express 服务端与前端面板，负责任务下发、状态展示及触发系统级自动化脚本。
@@ -49,8 +49,8 @@ traego 的运行依赖三个核心组件：
 克隆项目并安装依赖：
 
 ```bash
-git clone https://github.com/Uygniqoar/Task-dispatcher.git traego
-cd traego
+git clone https://github.com/Uygniqoar/Task-dispatcher.git Traego
+cd Traego
 npm install
 ```
 
@@ -71,7 +71,7 @@ npm run start-ui
 ```json
 {
   "mcpServers": {
-    "traego": {
+    "Traego": {
       "command": "node",
       "args": ["c:/Users/rao/Desktop/IRDP/Task-dispatcher/task-bridge.js"],
       "env": {
@@ -101,23 +101,25 @@ npm run start-ui
 
 为了让 Trae 拥有更高的自主性，强烈建议在 Trae 的 **Settings -> Features -> User Instructions** 中添加以下系统提示词（System Prompt）：
 
-> "你已连接到 traego MCP 工具。每当你启动或空闲时，请优先调用 `get_task` 检查是否有待处理任务。如果有 pending 任务，请直接开始开发，无需询问我。开发完成后，务必调用 `complete_task` 汇报进度，并在 `summary` 参数中简述你所做的修改。"
+> "你已连接到 Traego MCP 工具。每当你启动或空闲时，请优先调用 `get_task` 检查是否有待处理任务。如果有 pending 任务，请直接开始开发，无需询问我。开发完成后，务必调用 `complete_task` 汇报进度，并在 `summary` 参数中简述你所做的修改。"
+> 
+> （如果你在 Trae 的 MCP 配置里将 server key 配置为 `Traego`，工具全名会以 `mcp_Traego_` 为前缀）
 
 ---
 
 ## 🛠️ MCP 工具说明
 
-traego 为 Trae 提供了以下 MCP Tools（工具全名通常形如 `mcp_traego_<tool>`）：
+Traego 为 Trae 提供了以下 MCP Tools（工具全名通常形如 `mcp_Traego_<tool>`）：
 
-- **`mcp_traego_get_task`**
+- **`mcp_Traego_get_task`**
   - **参数**: `projectPath` (当前项目的绝对路径)
   - **作用**: 获取指定项目下排队中的第一个 `pending` 任务，并自动将其状态锁定为 `in_progress`。
   
-- **`mcp_traego_complete_task`**
+- **`mcp_Traego_complete_task`**
   - **参数**: `taskId` (任务 ID), `summary` (可选，执行简报)
   - **作用**: 将指定任务标记为已完成，回传执行成果。
 
-- **`mcp_traego_ping`**
+- **`mcp_Traego_ping`**
   - **参数**: `projectPath`
   - **作用**: 刷新项目心跳，管理面板可通过此接口判断目标项目窗口内的 Trae 是否已成功挂载 MCP。
 
@@ -135,13 +137,13 @@ traego 为 Trae 提供了以下 MCP Tools（工具全名通常形如 `mcp_traego
 说明管理面板未检测到该项目路径下的 MCP 调用记录。
 **解决方案**：
 1. 确认 Trae MCP 配置中的 `TASKS_FILE_PATH` 路径是否正确。
-2. 在该项目对应的 Trae 窗口中，呼出 Solo 模式，手动输入并执行一次 `@traego ping`，面板状态即会自动刷新为绿色已连接。
+2. 在该项目对应的 Trae 窗口中，呼出 Solo 模式，手动输入并执行一次 `@Traego ping`，面板状态即会自动刷新为绿色已连接。
 
 ### Q3: 为什么发送到 Trae 的中文变成了乱码或缺失？
-traego 在自动化注入指令时会自动处理大部分字符的转义（如大括号、特殊符号）。如果遇到系统级输入法干扰，请确保当前系统的默认输入状态为英文半角，或检查 `server.js` 中的 `escapeSendKeysText` 逻辑。
+Traego 在自动化注入指令时会自动处理大部分字符的转义（如大括号、特殊符号）。如果遇到系统级输入法干扰，请确保当前系统的默认输入状态为英文半角，或检查 `server.js` 中的 `escapeSendKeysText` 逻辑。
 
 ---
 
 <div align="center">
-  <p>Made with ❤️ by the traego Contributors.</p>
+  <p>Made with ❤️ by the Traego Contributors.</p>
 </div>

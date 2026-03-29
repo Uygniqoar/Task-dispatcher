@@ -1,7 +1,7 @@
 @echo off
-powershell -NoProfile -Command "Start-ScheduledTask -TaskName 'traego'" 1>nul 2>nul
+powershell -NoProfile -Command "Start-ScheduledTask -TaskName 'Traego'" 1>nul 2>nul
 if %errorlevel% neq 0 (
-  echo Failed to start scheduled task: traego
+  echo Failed to start scheduled task: Traego
   exit /b 1
 )
-echo Started: traego
+echo Started: Traego

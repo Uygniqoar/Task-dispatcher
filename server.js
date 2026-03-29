@@ -49,7 +49,7 @@ function registerApiRoutes(app) {
   }
 
   function runEncodedPowerShell(script, callback) {
-    const tmp = path.join(os.tmpdir(), `traego-${crypto.randomUUID()}.ps1`);
+    const tmp = path.join(os.tmpdir(), `Traego-${crypto.randomUUID()}.ps1`);
     fs.writeFile(tmp, `\ufeff${script}`, "utf8")
       .then(() => {
         exec(
@@ -80,7 +80,7 @@ function registerApiRoutes(app) {
 
     const config = {
       mcpServers: {
-        "traego": {
+        "Traego": {
           command: "node",
           args: [bridgePath],
           env: {
@@ -173,7 +173,7 @@ function registerApiRoutes(app) {
 
     const projectName = path.basename(task.projectPath);
     const sendText = escapeSendKeysText(
-      `${task.prompt}\n\n请在完成后调用 @traego complete_task，taskId=${task.id}，并在 summary 里简述你做了什么。`
+      `${task.prompt}\n\n请在完成后调用 @Traego complete_task，taskId=${task.id}，并在 summary 里简述你做了什么。`
     );
     const soloKeys = process.env.TRAE_SOLO_KEYS || "^i";
     const resultPrefix = "TRAEGO_RESULT=";
@@ -498,10 +498,10 @@ public static class Win32 {
 registerApiRoutes(appApi);
 registerApiRoutes(appUi);
 
-appApi.listen(API_PORT, "0.0.0.0", () => {
-  console.log(`API Server running at http://0.0.0.0:${API_PORT}`);
+appApi.listen(API_PORT, "127.0.0.1", () => {
+  console.log(`API Server running at http://127.0.0.1:${API_PORT}`);
 });
 
-appUi.listen(UI_PORT, "0.0.0.0", () => {
-  console.log(`Management UI Server running at http://0.0.0.0:${UI_PORT}`);
+appUi.listen(UI_PORT, "127.0.0.1", () => {
+  console.log(`Management UI Server running at http://127.0.0.1:${UI_PORT}`);
 });
