@@ -1,0 +1,29 @@
+{
+  "name": "task-dispatcher",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "task-bridge.js",
+  "scripts": {
+    "start-mcp": "node task-bridge.js",
+    "start-ui": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Uygniqoar/Task-dispatcher.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Uygniqoar/Task-dispatcher/issues"
+  },
+  "homepage": "https://github.com/Uygniqoar/Task-dispatcher#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}

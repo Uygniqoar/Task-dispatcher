@@ -1,0 +1,32 @@
+{
+  "tasks": [
+    {
+      "id": "test-1",
+      "prompt": "为项目添加 README.md",
+      "projectPath": "c:\\Users\\rao\\Desktop\\IRDP\\Task-dispatcher",
+      "status": "pending",
+      "createdAt": "2026-03-29T12:00:00.000Z"
+    },
+    {
+      "id": "1774762650210",
+      "prompt": "前端全是乱码不是中文，修复",
+      "projectPath": "C:\\Users\\rao\\Desktop\\SDP\\BaiduIndexHunter",
+      "status": "pending",
+      "createdAt": "2026-03-29T05:37:30.210Z",
+      "dispatch": {
+        "attempts": 5,
+        "lastAttemptAt": "2026-03-29T06:16:55.873Z",
+        "phase": "failed",
+        "ok": false,
+        "error": "APP_ACTIVATE_FAILED",
+        "details": "TASKDISPATCHER_RESULT=APP_ACTIVATE_FAILED\r\n"
+      }
+    }
+  ],
+  "projectStatus": {
+    "c:\\users\\rao\\desktop\\sdp\\baiduindexhunter": {
+      "lastHeartbeat": "2026-03-29T05:22:04.209Z",
+      "path": "c:\\Users\\rao\\Desktop\\SDP\\BaiduIndexHunter"
+    }
+  }
+}

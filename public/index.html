@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trae 任务派发器 - 管理面板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-72 bg-gray-900 text-white flex flex-col flex-shrink-0">
+        <div class="p-6 border-b border-gray-800">
+            <h1 class="text-xl font-bold text-blue-400">Task Dispatcher</h1>
+            <p class="text-xs text-gray-400 mt-1">管理面板 v1.2</p>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+            <div class="flex items-center justify-between mb-4 px-2">
+                <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">项目列表</h2>
+                <button onclick="showConfig()" class="text-[10px] bg-blue-600/20 text-blue-400 border border-blue-400/30 px-2 py-0.5 rounded hover:bg-blue-600 hover:text-white transition-all">
+                    MCP 配置
+                </button>
+            </div>
+            <nav id="projectList" class="space-y-1">
+                <button onclick="filterProject(null)" 
+                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors bg-gray-800 text-white">
+                    全部项目
+                </button>
+                <!-- 项目列表将通过 JS 加载 -->
+            </nav>
+        </div>
+        <div class="p-4 border-t border-gray-800 text-[10px] text-gray-500 text-center">
+            API: /api (同源)
+        </div>
+    </aside>
+
+    <!-- Modal for MCP Config -->
+    <div id="configModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
+                <h3 class="font-bold text-gray-200">MCP 服务器配置</h3>
+                <button onclick="hideConfig()" class="text-gray-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-400 mb-4">请将以下 JSON 配置添加到 Trae 的 MCP 设置中：</p>
+                <div class="relative">
+                    <pre id="configContent" class="bg-gray-950 text-blue-300 p-4 rounded-lg text-xs font-mono overflow-x-auto max-h-96 border border-gray-800"></pre>
+                    <button onclick="copyConfig(this)" class="absolute top-3 right-3 bg-blue-600 text-white text-[10px] px-3 py-1.5 rounded-md hover:bg-blue-700 transition-all flex items-center gap-1.5 shadow-lg">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                        直接复制
+                    </button>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button onclick="hideConfig()" class="bg-gray-700 text-gray-200 px-4 py-2 rounded-md text-sm hover:bg-gray-600 transition-all">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+                <h2 class="text-lg font-semibold mb-4 text-gray-800 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
+                    发布新任务
+                </h2>
+                <form id="taskForm" class="space-y-4">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">项目路径</label>
+                            <input type="text" id="projectPath" placeholder="例如: C:\Projects\MyProject" required
+                                class="block w-full border border-gray-300 rounded-md shadow-sm p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">任务描述 (Prompt)</label>
+                            <textarea id="prompt" rows="3" placeholder="在此输入给 Trae 的指令..." required
+                                class="block w-full border border-gray-300 rounded-md shadow-sm p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"></textarea>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit" 
+                            class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-blue-700 transition-all shadow-sm hover:shadow-md active:scale-95">
+                            下发任务
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="listTitle" class="text-xl font-bold text-gray-800">所有任务</h2>
+                <div class="flex gap-2">
+                    <span id="taskCount" class="text-sm bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-medium">0 任务</span>
+                </div>
+            </div>
+
+            <div id="connectionBanner" class="hidden mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex-1">
+                        <div class="font-semibold">后端未连接</div>
+                        <div id="connectionBannerDetail" class="text-xs mt-1 text-red-600/90">正在重试…</div>
+                    </div>
+                    <button id="retryNowBtn" class="bg-red-600 text-white text-xs px-3 py-1.5 rounded-md hover:bg-red-700 transition-all">
+                        立即重试
+                    </button>
+                </div>
+            </div>
+
+            <div id="taskList" class="space-y-4">
+                <!-- 任务列表将通过 JS 加载 -->
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = '';
+        const taskForm = document.getElementById('taskForm');
+        const taskList = document.getElementById('taskList');
+        const projectList = document.getElementById('projectList');
+        const taskCount = document.getElementById('taskCount');
+        const listTitle = document.getElementById('listTitle');
+        const configModal = document.getElementById('configModal');
+        const configContent = document.getElementById('configContent');
+        const connectionBanner = document.getElementById('connectionBanner');
+        const connectionBannerDetail = document.getElementById('connectionBannerDetail');
+        const retryNowBtn = document.getElementById('retryNowBtn');
+
+        let allTasks = [];
+        let currentProjectFilter = null;
+        let fetchTimer = null;
+        let retryMs = 1000;
+
+        function formatDispatchError(code) {
+            const c = String(code || '');
+            if (c === 'NEED_ADMIN') return '需要管理员权限启动派发器（右键 PowerShell → 以管理员运行，再 npm run start-ui）';
+            if (c === 'APP_ACTIVATE_FAILED') return '无法激活 Trae 窗口：请先将 Trae 窗口还原并手动点到前台（含切到对应虚拟桌面）；若 Trae 以管理员运行，请确保派发器也以管理员启动';
+            if (c === 'TRAE_WINDOW_NOT_FOUND') return '未找到 Trae 窗口（请确保 Trae 正在运行且窗口可见）';
+            if (c === 'POWERSHELL_FAILED') return '系统自动化脚本执行失败（PowerShell 限制/杀软拦截）';
+            return c;
+        }
+
+        function scheduleFetch(delay) {
+            if (fetchTimer) clearTimeout(fetchTimer);
+            fetchTimer = setTimeout(fetchTasks, delay);
+        }
+
+        retryNowBtn.addEventListener('click', () => {
+            retryMs = 500;
+            scheduleFetch(0);
+        });
+
+        async function showConfig() {
+            try {
+                const res = await fetch(`${API_BASE}/api/config`);
+                const config = await res.json();
+                configContent.textContent = JSON.stringify(config, null, 2);
+                configModal.classList.remove('hidden');
+            } catch (err) {
+                alert('获取配置失败，请确保后端服务已启动');
+            }
+        }
+
+        function hideConfig() {
+            configModal.classList.add('hidden');
+        }
+
+        function copyConfig(btn) {
+            const text = configContent.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 已复制';
+                btn.classList.replace('bg-blue-600', 'bg-green-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.replace('bg-green-600', 'bg-blue-600');
+                }, 2000);
+            });
+        }
+
+        async function checkConnection(path, btn) {
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> 检查中...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/check-connection?projectPath=${encodeURIComponent(path)}`);
+                const data = await res.json();
+                
+                if (data.status === 'ok') {
+                    if (data.lastHeartbeat) {
+                        const hbDate = new Date(data.lastHeartbeat);
+                        const diffSec = Math.floor((new Date() - hbDate) / 1000);
+                        const hbText = diffSec < 60 ? `${diffSec}秒前活跃` : hbDate.toLocaleTimeString();
+                        btn.className = "text-[11px] bg-green-50 text-green-600 border border-green-200 px-3 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5";
+                        btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Trae 已连接 (${hbText})`;
+                    } else {
+                        btn.className = "text-[11px] bg-yellow-50 text-yellow-600 border border-yellow-200 px-3 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 group relative";
+                        btn.innerHTML = `
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> 
+                            路径正确但 Trae 未心跳
+                            <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 leading-tight">
+                                Trae 还没有调用到 MCP 工具。请在 Trae 里执行一次 @TaskDispatcher ping 或获取任务，然后再检查连接。
+                            </span>
+                        `;
+                        // Create an automatic setup helper button if it's the first time
+                        if (!document.getElementById('setupHelper')) {
+                            const helper = document.createElement('button');
+                            helper.id = 'setupHelper';
+                            helper.className = 'ml-2 text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded hover:bg-blue-700 transition-all';
+                            helper.textContent = '去配置 MCP';
+                            helper.onclick = (e) => {
+                                e.stopPropagation();
+                                showConfig();
+                            };
+                            btn.parentNode.appendChild(helper);
+                            setTimeout(() => helper.remove(), 10000);
+                        }
+                    }
+                } else {
+                    btn.className = "text-[11px] bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5";
+                    btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 连接失败';
+                    console.warn('Connection check warning:', data.message);
+                }
+            } catch (err) {
+                btn.className = "text-[11px] bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5";
+                btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 网络错误';
+            } finally {
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.className = "text-[11px] bg-gray-50 text-gray-600 border border-gray-200 px-3 py-1 rounded-md hover:bg-gray-100 transition-colors font-medium flex items-center gap-1.5";
+                    btn.disabled = false;
+                }, 3000);
+            }
+        }
+
+        function getProjectName(path) {
+            if (!path) return 'Unknown';
+            // 兼容 Windows 和 Unix 路径
+            const parts = path.split(/[/\\]/);
+            return parts.filter(Boolean).pop() || path;
+        }
+
+        function filterProject(projectPath) {
+            currentProjectFilter = projectPath;
+            
+            // 更新 UI 状态
+            const buttons = projectList.querySelectorAll('button');
+            buttons.forEach(btn => {
+                if ((projectPath === null && btn.textContent.trim() === '全部项目') || 
+                    (projectPath !== null && btn.getAttribute('data-path') === projectPath)) {
+                    btn.classList.add('bg-gray-800', 'text-white');
+                    btn.classList.remove('text-gray-400', 'hover:text-white');
+                } else {
+                    btn.classList.remove('bg-gray-800', 'text-white');
+                    btn.classList.add('text-gray-400', 'hover:text-white');
+                }
+            });
+
+            listTitle.textContent = projectPath ? `项目: ${getProjectName(projectPath)}` : '所有任务';
+            renderTasks();
+        }
+
+        function renderSidebar(tasks) {
+            const projects = [...new Set(tasks.map(t => t.projectPath))].sort();
+            
+            const allBtn = `
+                <button onclick="filterProject(null)" 
+                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentProjectFilter === null ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
+                    全部项目
+                </button>
+            `;
+
+            const projectBtns = projects.map(path => `
+                <button onclick="filterProject('${path.replace(/\\/g, '\\\\')}')" 
+                    data-path="${path}"
+                    class="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentProjectFilter === path ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}">
+                    <div class="truncate">${getProjectName(path)}</div>
+                    <div class="text-[10px] text-gray-500 truncate">${path}</div>
+                </button>
+            `).join('');
+
+            projectList.innerHTML = allBtn + projectBtns;
+        }
+
+        function renderTasks() {
+            const filteredTasks = currentProjectFilter 
+                ? allTasks.filter(t => t.projectPath === currentProjectFilter)
+                : allTasks;
+
+            taskCount.textContent = `${filteredTasks.length} 任务`;
+
+            if (filteredTasks.length === 0) {
+                taskList.innerHTML = `
+                    <div class="bg-white rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
+                        <p>暂无任务</p>
+                    </div>
+                `;
+                return;
+            }
+
+            taskList.innerHTML = filteredTasks.slice().reverse().map(task => `
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 hover:border-blue-300 transition-colors">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-mono text-gray-400">#${task.id.slice(-6)}</span>
+                            <span class="text-xs px-2.5 py-1 rounded-full font-bold ${
+                                task.status === 'completed' ? 'text-green-700 bg-green-50 border border-green-200' : 
+                                task.status === 'dispatching' ? 'text-purple-700 bg-purple-50 border border-purple-200 animate-pulse' :
+                                task.status === 'in_progress' ? 'text-blue-700 bg-blue-50 border border-blue-200 animate-pulse' : 
+                                'text-yellow-700 bg-yellow-50 border border-yellow-200'
+                            }">
+                                ${task.status === 'dispatching' ? '派发中...' : task.status === 'in_progress' ? '正在执行...' : task.status.toUpperCase()}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="checkConnection('${task.projectPath.replace(/\\/g, '\\\\')}', this)" 
+                                class="text-[11px] bg-gray-50 text-gray-600 border border-gray-200 px-3 py-1 rounded-md hover:bg-gray-100 transition-colors font-medium flex items-center gap-1.5">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                检查连接
+                            </button>
+                            ${task.status !== 'completed' ? `
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="openInTrae('${task.projectPath.replace(/\\/g, '\\\\')}', this)"
+                                       class="text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1 rounded-md hover:bg-blue-100 transition-colors font-medium">
+                                       在 Trae 中打开
+                                    </button>
+                                    ${task.status === 'pending' ? `
+                                        <button onclick="executeTask('${task.id}', this)" 
+                                            class="text-[11px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded-md hover:bg-indigo-700 transition-all font-bold flex items-center gap-1.5 shadow-sm active:scale-95">
+                                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                                            开始执行
+                                        </button>
+                                    ` : ''}
+                                    ${(task.status === 'dispatching' || task.status === 'in_progress') ? `
+                                        <button onclick="resetTask('${task.id}', this)" 
+                                            class="text-[11px] bg-orange-50 text-orange-600 border border-orange-100 px-3 py-1 rounded-md hover:bg-orange-100 transition-colors font-medium">
+                                            重置
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                            <button onclick="deleteTask('${task.id}', this)" 
+                                class="text-[11px] bg-red-50 text-red-600 border border-red-100 px-3 py-1 rounded-md hover:bg-red-100 transition-colors font-medium flex items-center gap-1.5 group">
+                                <svg class="w-3 h-3 text-red-400 group-hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                删除
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900 mb-1">任务指令</p>
+                            <p class="text-sm text-gray-700 leading-relaxed">${task.prompt}</p>
+                        </div>
+                        
+                        <div>
+                            <p class="text-xs font-medium text-gray-500 mb-1">项目路径</p>
+                            <p class="text-xs text-gray-400 font-mono break-all">${task.projectPath}</p>
+                        </div>
+
+                        ${task.dispatch ? `
+                            <div class="mt-3 p-3 bg-gray-50 rounded-md border border-gray-200">
+                                <p class="text-xs font-bold text-gray-700 mb-1.5">派发进度</p>
+                                <div class="text-xs text-gray-600 space-y-1">
+                                    <div>阶段: ${task.dispatch.phase || '-'}</div>
+                                    <div>最近一次: ${task.dispatch.lastAttemptAt ? new Date(task.dispatch.lastAttemptAt).toLocaleString() : '-'}</div>
+                                    <div>结果: ${task.dispatch.ok === true ? '已发送到 Trae' : task.dispatch.ok === false ? '失败' : '进行中'}</div>
+                                    ${task.dispatch.error ? `<div class="text-red-600">错误: ${formatDispatchError(task.dispatch.error)}</div>` : ''}
+                                    ${task.dispatch.details ? `<div class="text-[10px] text-gray-500 mt-1 whitespace-pre-wrap break-all">详情: ${String(task.dispatch.details).slice(0, 300)}${String(task.dispatch.details).length > 300 ? '…' : ''}</div>` : ''}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        ${task.summary ? `
+                            <div class="mt-4 p-3 bg-green-50 rounded-md border border-green-100">
+                                <p class="text-xs font-bold text-green-800 mb-1.5 flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
+                                    执行简报
+                                </p>
+                                <div class="text-xs text-green-700 whitespace-pre-wrap leading-relaxed">${task.summary}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-center justify-between">
+                        <div class="flex flex-wrap gap-4">
+                            <span class="text-[10px] text-gray-400 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                创建: ${new Date(task.createdAt).toLocaleString()}
+                            </span>
+                            ${task.startedAt ? `
+                                <span class="text-[10px] text-blue-400 flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                    开始: ${new Date(task.startedAt).toLocaleString()}
+                                </span>
+                            ` : ''}
+                            ${task.completedAt ? `
+                                <span class="text-[10px] text-green-400 flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                    完成: ${new Date(task.completedAt).toLocaleString()}
+                                </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function fetchTasks() {
+            try {
+                {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 1500);
+                    const healthRes = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
+                    clearTimeout(timeout);
+                    if (!healthRes.ok) throw new Error('health_not_ok');
+                }
+
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 2500);
+                const res = await fetch(`${API_BASE}/api/tasks`, { signal: controller.signal });
+                clearTimeout(timeout);
+                const data = await res.json();
+                
+                const oldProjects = [...new Set(allTasks.map(t => t.projectPath))];
+                allTasks = data.tasks;
+                const newProjects = [...new Set(allTasks.map(t => t.projectPath))];
+                
+                // 只有当项目列表变化时才重新渲染侧边栏，避免闪烁
+                if (JSON.stringify(oldProjects.sort()) !== JSON.stringify(newProjects.sort())) {
+                    renderSidebar(allTasks);
+                }
+                
+                renderTasks();
+                connectionBanner.classList.add('hidden');
+                retryMs = 1000;
+                scheduleFetch(5000);
+            } catch (err) {
+                connectionBanner.classList.remove('hidden');
+                const reason = err && err.name === 'AbortError' ? '请求超时' : '连接被拒绝';
+                connectionBannerDetail.textContent = `${reason}，${Math.ceil(retryMs / 1000)} 秒后重试…`;
+                scheduleFetch(retryMs);
+                retryMs = Math.min(Math.floor(retryMs * 1.8), 15000);
+            }
+        }
+
+        async function executeTask(id, btn) {
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> 启动中...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks/${id}/execute`, {
+                    method: 'POST'
+                });
+                
+                if (res.ok) {
+                    fetchTasks();
+                    setTimeout(fetchTasks, 1500);
+                    setTimeout(fetchTasks, 4000);
+                } else {
+                    const error = await res.json();
+                    alert(`启动失败: ${error.error || '未知错误'}`);
+                }
+            } catch (err) {
+                alert('连接 API 失败，请检查后端服务是否运行');
+            } finally {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        }
+
+        async function resetTask(id, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = '重置中...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks/${id}/reset`, { method: 'POST' });
+                if (res.ok) {
+                    fetchTasks();
+                } else {
+                    const error = await res.json().catch(() => ({}));
+                    alert(`重置失败: ${error.error || '未知错误'}`);
+                }
+            } catch (err) {
+                alert('连接 API 失败');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function openInTrae(projectPath, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = '正在打开...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/open-in-trae`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectPath })
+                });
+
+                if (!res.ok) {
+                    const error = await res.json().catch(() => ({}));
+                    await navigator.clipboard.writeText(projectPath).catch(() => {});
+                    alert(`无法自动打开 Trae（可能是预览页/浏览器限制）。已复制项目路径，可手动在 Trae 打开。\n\n${error.error || ''}`);
+                }
+            } catch (err) {
+                await navigator.clipboard.writeText(projectPath).catch(() => {});
+                alert('无法自动打开 Trae（可能是预览页/浏览器限制）。已复制项目路径，可手动在 Trae 打开。');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteTask(id, btn) {
+            if (!confirm('确定要删除这个任务吗？')) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (res.ok) {
+                    fetchTasks();
+                } else {
+                    alert('删除失败');
+                }
+            } catch (err) {
+                alert('连接 API 失败');
+            }
+        }
+
+        taskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const projectPath = document.getElementById('projectPath').value;
+            const prompt = document.getElementById('prompt').value;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectPath, prompt })
+                });
+
+                if (res.ok) {
+                    document.getElementById('prompt').value = '';
+                    fetchTasks();
+                } else {
+                    alert('任务下发失败');
+                }
+            } catch (err) {
+                alert('连接 API 失败，请检查后端服务是否运行');
+            }
+        });
+
+        fetchTasks();
+    </script>
+</body>
+</html>
